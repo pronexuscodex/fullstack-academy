@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { CONCEPT_EXPLANATIONS } from "./concepts_data.js";
 
 const CURRICULUM = [
   {
@@ -1175,28 +1176,382 @@ const GLOBAL_CSS = `
   .fa-transition { transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
 `;
 
-function CodeBlock({ code }) {
-  const { T } = useTheme();
+// ── Syntax Highlighter ───────────────────────────────────────────────────────
+const HL = {
+  keyword:   "#C678DD",  // purple  — const, function, return …
+  builtin:   "#E5C07B",  // yellow  — console, Promise, Object …
+  string:    "#98C379",  // green   — 'text', "text", `template`
+  comment:   "#5C6370",  // gray    — // …  /* … */
+  number:    "#D19A66",  // orange  — 42, 3.14, 0xff
+  func:      "#61AFEF",  // blue    — functionName()
+  type:      "#E5C07B",  // yellow  — TypeScript types / class names
+  prop:      "#ABB2BF",  // light   — .property
+  operator:  "#56B6C2",  // cyan    — => === !== && ||
+  tag:       "#E06C75",  // red     — <div> JSX tags
+  attr:      "#D19A66",  // orange  — className="…"
+  cssProp:   "#E06C75",  // red     — color, font-size
+  cssVal:    "#D19A66",  // orange  — #fff, 1rem, bold
+  cssAt:     "#C678DD",  // purple  — @media, @keyframes
+  cssSel:    "#E5C07B",  // yellow  — .class, #id, element
+  sqlKw:     "#C678DD",  // purple  — SELECT, FROM, WHERE …
+  yamlKey:   "#E06C75",  // red     — key: value
+  plain:     "#ABB2BF",  // default light gray
+  punct:     "#ABB2BF",  // { } ( ) [ ] ; ,
+};
+
+const JS_KEYWORDS = new Set([
+  "break","case","catch","class","const","continue","debugger","default",
+  "delete","do","else","export","extends","finally","for","function","if",
+  "import","in","instanceof","let","new","of","return","static","super",
+  "switch","this","throw","try","typeof","var","void","while","with","yield",
+  "async","await","from","as","null","undefined","true","false",
+  // TypeScript extras
+  "interface","type","enum","namespace","declare","abstract","implements",
+  "readonly","satisfies","keyof","infer","is","override","module","require",
+  "get","set",
+]);
+
+const JS_BUILTINS = new Set([
+  "console","Promise","Object","Array","String","Number","Boolean","Symbol",
+  "Map","Set","WeakMap","WeakSet","Date","Math","JSON","Error","TypeError",
+  "RangeError","ReferenceError","SyntaxError","RegExp","Function","Proxy",
+  "Reflect","Intl","parseInt","parseFloat","isNaN","isFinite","encodeURI",
+  "decodeURI","setTimeout","clearTimeout","setInterval","clearInterval",
+  "fetch","window","document","navigator","localStorage","sessionStorage",
+  "process","globalThis","structuredClone","crypto","performance","URL",
+  "URLSearchParams","FormData","Headers","Request","Response","AbortController",
+  "ReadableStream","WritableStream","TextEncoder","TextDecoder","Blob","File",
+  "FileReader","Worker","WebSocket","EventSource","MutationObserver",
+  "IntersectionObserver","ResizeObserver",
+  "vi","describe","it","test","expect","beforeEach","afterEach","beforeAll","afterAll",
+]);
+
+const SQL_KEYWORDS = new Set([
+  "SELECT","FROM","WHERE","JOIN","LEFT","RIGHT","INNER","OUTER","FULL","CROSS",
+  "ON","AS","AND","OR","NOT","IN","IS","NULL","BETWEEN","LIKE","ILIKE",
+  "ORDER","BY","GROUP","HAVING","LIMIT","OFFSET","UNION","ALL","DISTINCT",
+  "INSERT","INTO","VALUES","UPDATE","SET","DELETE","CREATE","TABLE","INDEX",
+  "DROP","ALTER","ADD","COLUMN","PRIMARY","KEY","FOREIGN","REFERENCES",
+  "CONSTRAINT","DEFAULT","UNIQUE","CHECK","BEGIN","COMMIT","ROLLBACK",
+  "TRANSACTION","GRANT","REVOKE","CASCADE","WITH","INTERVAL","NOW","COUNT",
+  "SUM","AVG","MIN","MAX","COALESCE","NULLIF","CASE","WHEN","THEN","ELSE","END",
+  "RETURNING","EXPLAIN","ANALYZE","VACUUM","TRUNCATE","UPSERT","ON CONFLICT",
+]);
+
+function tokenizeJS(code) {
+  const tokens = [];
+  let i = 0;
+  let prevNonWs = "";   // track last non-whitespace token type for context
+
+  const push = (text, color) => { if (text) tokens.push({ text, color }); };
+
+  while (i < code.length) {
+    // ── Line comment
+    if (code[i] === "/" && code[i+1] === "/") {
+      const end = code.indexOf("\n", i);
+      const s = end === -1 ? code.slice(i) : code.slice(i, end);
+      push(s, HL.comment); i += s.length; prevNonWs = "comment"; continue;
+    }
+    // ── Block comment
+    if (code[i] === "/" && code[i+1] === "*") {
+      const end = code.indexOf("*/", i + 2);
+      const s = end === -1 ? code.slice(i) : code.slice(i, end + 2);
+      push(s, HL.comment); i += s.length; prevNonWs = "comment"; continue;
+    }
+    // ── Template literal
+    if (code[i] === "`") {
+      let j = i + 1, s = "`";
+      while (j < code.length) {
+        if (code[j] === "\\" ) { s += code[j] + (code[j+1]||""); j += 2; continue; }
+        s += code[j];
+        if (code[j] === "`") { j++; break; }
+        j++;
+      }
+      push(s, HL.string); i = j; prevNonWs = "string"; continue;
+    }
+    // ── Quoted string
+    if (code[i] === '"' || code[i] === "'") {
+      const q = code[i]; let j = i+1, s = q;
+      while (j < code.length) {
+        if (code[j] === "\\" ) { s += code[j] + (code[j+1]||""); j += 2; continue; }
+        if (code[j] === "\n") break;
+        s += code[j];
+        if (code[j] === q) { j++; break; }
+        j++;
+      }
+      push(s, HL.string); i = j; prevNonWs = "string"; continue;
+    }
+    // ── JSX tag name after < or </
+    if (code[i] === "<" && /[a-zA-Z/]/.test(code[i+1]||"")) {
+      push("<", HL.punct); i++;
+      if (code[i] === "/") { push("/", HL.punct); i++; }
+      const m = code.slice(i).match(/^[a-zA-Z][a-zA-Z0-9.]*/);
+      if (m) { push(m[0], HL.tag); i += m[0].length; }
+      prevNonWs = "tag"; continue;
+    }
+    // ── Number
+    if (/[0-9]/.test(code[i]) || (code[i] === "." && /[0-9]/.test(code[i+1]||""))) {
+      const m = code.slice(i).match(/^(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+\.?\d*(?:[eE][+-]?\d+)?n?)/);
+      if (m) { push(m[0], HL.number); i += m[0].length; prevNonWs = "number"; continue; }
+    }
+    // ── Identifier / keyword / builtin
+    if (/[a-zA-Z_$]/.test(code[i])) {
+      const m = code.slice(i).match(/^[a-zA-Z_$][a-zA-Z0-9_$]*/);
+      if (m) {
+        const word = m[0];
+        const after = code.slice(i + word.length).trimStart();
+        let color = HL.plain;
+        if (JS_KEYWORDS.has(word))          color = HL.keyword;
+        else if (JS_BUILTINS.has(word))     color = HL.builtin;
+        else if (/^[A-Z]/.test(word))       color = HL.type;
+        else if (after[0] === "(")          color = HL.func;
+        else if (prevNonWs === "dot")       color = HL.prop;
+        push(word, color); i += word.length; prevNonWs = "ident"; continue;
+      }
+    }
+    // ── Multi-char operators
+    const multiOps = ["===","!==","=>",">=","<=","==","!=","&&","||","??","?.",
+                       "**","++","--","+=","-=","*=","/=","...","::","->"];
+    let matched = false;
+    for (const op of multiOps) {
+      if (code.slice(i, i+op.length) === op) {
+        push(op, HL.operator); i += op.length; prevNonWs = "op"; matched = true; break;
+      }
+    }
+    if (matched) continue;
+    // ── Single char
+    const ch = code[i];
+    if (ch === ".") prevNonWs = "dot"; else if (!/\s/.test(ch)) prevNonWs = ch;
+    const isOp = "=+-*/%<>&|^~!?:".includes(ch);
+    push(ch, isOp ? HL.operator : HL.punct);
+    i++;
+  }
+  return tokens;
+}
+
+function tokenizeCSS(code) {
+  const tokens = [];
+  let i = 0;
+  const push = (text, color) => { if (text) tokens.push({ text, color }); };
+  // state: 'selector' | 'rule' | 'value'
+  let state = "selector";
+
+  while (i < code.length) {
+    // Block comment
+    if (code[i] === "/" && code[i+1] === "*") {
+      const end = code.indexOf("*/", i+2);
+      const s = end === -1 ? code.slice(i) : code.slice(i, end+2);
+      push(s, HL.comment); i += s.length; continue;
+    }
+    // At-rule
+    if (code[i] === "@") {
+      const m = code.slice(i).match(/^@[a-zA-Z-]+/);
+      if (m) { push(m[0], HL.cssAt); i += m[0].length; continue; }
+    }
+    // Strings
+    if (code[i] === '"' || code[i] === "'") {
+      const q = code[i]; let j = i+1, s = q;
+      while (j < code.length) {
+        if (code[j] === "\\") { s += code[j] + (code[j+1]||""); j+=2; continue; }
+        s += code[j]; if (code[j] === q) { j++; break; } j++;
+      }
+      push(s, HL.string); i = j; continue;
+    }
+    // Open brace → switch to 'rule'
+    if (code[i] === "{") { push("{", HL.punct); i++; state = "rule"; continue; }
+    // Close brace → switch to 'selector'
+    if (code[i] === "}") { push("}", HL.punct); i++; state = "selector"; continue; }
+    // Colon inside rule → switch to 'value'
+    if (code[i] === ":" && state === "rule") {
+      push(":", HL.punct); i++; state = "value"; continue;
+    }
+    // Semicolon → back to 'rule'
+    if (code[i] === ";" && state === "value") {
+      push(";", HL.punct); i++; state = "rule"; continue;
+    }
+    // Identifier-ish token
+    if (/[a-zA-Z_-]/.test(code[i])) {
+      const m = code.slice(i).match(/^[a-zA-Z_][a-zA-Z0-9_-]*/);
+      if (m) {
+        const word = m[0];
+        let color = state === "selector" ? HL.cssSel : state === "rule" ? HL.cssProp : HL.cssVal;
+        push(word, color); i += word.length; continue;
+      }
+    }
+    // Number + optional unit in value state
+    if (/[0-9.]/.test(code[i]) && state === "value") {
+      const nm = code.slice(i).match(/^[\d.]+/);
+      if (nm) {
+        push(nm[0], HL.number); i += nm[0].length;
+        const um = code.slice(i).match(/^(px|em|rem|vh|vw|vmin|vmax|%|pt|ch|fr|deg|ms|s|ex|cm|mm|in|pc|svh|dvh)(?![a-zA-Z])/);
+        if (um) { push(um[0], HL.cssVal); i += um[0].length; }
+        continue;
+      }
+    }
+    // Hex color
+    if (code[i] === "#" && state === "value") {
+      const m = code.slice(i).match(/^#[0-9a-fA-F]+/);
+      if (m) { push(m[0], HL.string); i += m[0].length; continue; }
+    }
+    push(code[i], HL.plain); i++;
+  }
+  return tokens;
+}
+
+function tokenizeSQL(code) {
+  const tokens = [];
+  let i = 0;
+  const push = (text, color) => { if (text) tokens.push({ text, color }); };
+
+  while (i < code.length) {
+    // Line comment
+    if (code[i] === "-" && code[i+1] === "-") {
+      const end = code.indexOf("\n", i);
+      const s = end === -1 ? code.slice(i) : code.slice(i, end);
+      push(s, HL.comment); i += s.length; continue;
+    }
+    // String
+    if (code[i] === "'" || code[i] === '"') {
+      const q = code[i]; let j = i+1, s = q;
+      while (j < code.length) {
+        if (code[j] === "\\") { s += code[j] + (code[j+1]||""); j+=2; continue; }
+        s += code[j]; if (code[j] === q) { j++; break; } j++;
+      }
+      push(s, HL.string); i = j; continue;
+    }
+    // Number
+    if (/[0-9]/.test(code[i])) {
+      const m = code.slice(i).match(/^\d+\.?\d*/);
+      if (m) { push(m[0], HL.number); i += m[0].length; continue; }
+    }
+    // Identifier / keyword
+    if (/[a-zA-Z_]/.test(code[i])) {
+      const m = code.slice(i).match(/^[a-zA-Z_][a-zA-Z0-9_]*/);
+      if (m) {
+        const word = m[0];
+        push(word, SQL_KEYWORDS.has(word.toUpperCase()) ? HL.sqlKw : HL.plain);
+        i += word.length; continue;
+      }
+    }
+    push(code[i], HL.punct); i++;
+  }
+  return tokens;
+}
+
+function tokenizeYAML(code) {
+  // Line-by-line: key: value, # comment, - list item
+  const tokens = [];
+  const lines = code.split("\n");
+  lines.forEach((line, li) => {
+    const commentIdx = line.indexOf("#");
+    const hasComment = commentIdx !== -1 && (commentIdx === 0 || line[commentIdx-1] === " ");
+    const mainPart = hasComment ? line.slice(0, commentIdx) : line;
+    const commentPart = hasComment ? line.slice(commentIdx) : "";
+
+    const colonIdx = mainPart.indexOf(":");
+    if (colonIdx !== -1) {
+      const key = mainPart.slice(0, colonIdx + 1);
+      const val = mainPart.slice(colonIdx + 1);
+      tokens.push({ text: key, color: HL.yamlKey });
+      // values may be strings, numbers, booleans
+      const trimmed = val.trimStart();
+      if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
+        tokens.push({ text: val.slice(0, val.length - trimmed.length), color: HL.plain });
+        tokens.push({ text: trimmed, color: HL.string });
+      } else if (/^\s*(true|false|null)/.test(val)) {
+        tokens.push({ text: val, color: HL.keyword });
+      } else if (/^\s*\d/.test(val)) {
+        tokens.push({ text: val, color: HL.number });
+      } else {
+        tokens.push({ text: val, color: HL.plain });
+      }
+    } else {
+      tokens.push({ text: mainPart, color: HL.plain });
+    }
+    if (commentPart) tokens.push({ text: commentPart, color: HL.comment });
+    if (li < lines.length - 1) tokens.push({ text: "\n", color: HL.plain });
+  });
+  return tokens;
+}
+
+function tokenizePlain(code) {
+  // Highlight special file-tree characters or just return plain
+  return [{ text: code, color: HL.plain }];
+}
+
+function highlightCode(code, lang) {
+  const l = (lang || "").toLowerCase();
+  if (["js","jsx","ts","tsx","javascript","typescript"].includes(l)) return tokenizeJS(code);
+  if (["css","scss","sass","less"].includes(l))                       return tokenizeCSS(code);
+  if (["sql"].includes(l))                                            return tokenizeSQL(code);
+  if (["yaml","yml"].includes(l))                                     return tokenizeYAML(code);
+  return tokenizePlain(code);
+}
+
+// ── Language display names & colors ─────────────────────────────────────────
+const LANG_META = {
+  js:         { label: "JS",         dot: "#F0DB4F" },
+  javascript: { label: "JavaScript", dot: "#F0DB4F" },
+  jsx:        { label: "JSX",        dot: "#61DAFB" },
+  ts:         { label: "TS",         dot: "#3178C6" },
+  typescript: { label: "TypeScript", dot: "#3178C6" },
+  tsx:        { label: "TSX",        dot: "#3178C6" },
+  css:        { label: "CSS",        dot: "#264DE4" },
+  scss:       { label: "SCSS",       dot: "#CC6699" },
+  sql:        { label: "SQL",        dot: "#336791" },
+  yaml:       { label: "YAML",       dot: "#CB171E" },
+  yml:        { label: "YAML",       dot: "#CB171E" },
+  bash:       { label: "Bash",       dot: "#4EAA25" },
+  sh:         { label: "Shell",      dot: "#4EAA25" },
+  docker:     { label: "Docker",     dot: "#2496ED" },
+  dockerfile: { label: "Dockerfile", dot: "#2496ED" },
+  json:       { label: "JSON",       dot: "#F0DB4F" },
+  prisma:     { label: "Prisma",     dot: "#5A67D8" },
+};
+
+function CodeBlock({ code, lang = "" }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  const meta = LANG_META[lang.toLowerCase()] || null;
+  const tokens = highlightCode(code, lang);
+
   return (
-    <div style={{ position: "relative", margin: "1.25rem 0", borderRadius: 6, overflow: "hidden", border: `1px solid #2A2A2E` }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#242428", padding: "7px 14px" }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FF5F57" }} />
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FFBD2E" }} />
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#28C840" }} />
+    <div style={{ position: "relative", margin: "1.25rem 0", borderRadius: 8, overflow: "hidden", border: "1px solid #2A2A2E", boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}>
+      {/* Title bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#1A1A1E", padding: "7px 14px", borderBottom: "1px solid #2A2A2E" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FF5F57" }} />
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FFBD2E" }} />
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#28C840" }} />
+          </div>
+          {meta && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 4 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: meta.dot }} />
+              <span style={{ fontSize: 10.5, color: "#666", fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em" }}>
+                {meta.label}
+              </span>
+            </div>
+          )}
         </div>
-        <button onClick={copy} style={{ background: "none", border: "none", color: copied ? "#28C840" : "#888", fontSize: 11, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: "0.03em" }}>
-          {copied ? "copied" : "copy"}
+        <button
+          onClick={copy}
+          style={{ background: copied ? "#28C84018" : "none", border: copied ? "1px solid #28C84044" : "1px solid transparent", borderRadius: 4, color: copied ? "#28C840" : "#666", fontSize: 10.5, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: "0.03em", padding: "2px 8px", transition: "all 0.15s" }}
+        >
+          {copied ? "✓ copied" : "copy"}
         </button>
       </div>
-      <pre style={{ background: T.code, color: "#D4D4D4", padding: "1rem 1.25rem", overflowX: "auto", fontSize: 12.5, lineHeight: 1.7, fontFamily: "'DM Mono', monospace" }}>
-        <code>{code}</code>
+      {/* Code area */}
+      <pre style={{ background: "#111114", margin: 0, padding: "1rem 0", overflowX: "auto", fontSize: 12.5, lineHeight: 1.75, fontFamily: "'DM Mono', monospace" }}>
+        <code style={{ display: "block", padding: "0 1.25rem" }}>
+          {tokens.map((tok, idx) => (
+            <span key={idx} style={{ color: tok.color }}>{tok.text}</span>
+          ))}
+        </code>
       </pre>
     </div>
   );
@@ -1209,8 +1564,10 @@ function MarkdownContent({ content }) {
     <div style={{ color: T.mid, lineHeight: 1.8, fontSize: 14.5 }}>
       {parts.map((part, i) => {
         if (part.startsWith("```")) {
-          const code = part.replace(/^```\w*\n?/, "").replace(/```$/, "");
-          return <CodeBlock key={i} code={code} />;
+          const langMatch = part.match(/^```(\w*)/);
+          const lang = langMatch ? langMatch[1] : "";
+          const code = part.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
+          return <CodeBlock key={i} code={code} lang={lang} />;
         }
         const html = part
           .replace(/^## (.+)$/gm, `<h2 style="color:${T.ink};font-size:1.05rem;font-weight:600;margin:2rem 0 0.6rem;letter-spacing:-0.01em">$1</h2>`)
@@ -1231,11 +1588,119 @@ export default function FullstackAcademy() {
   const [activeSection, setActiveSection] = useState("home");
   const [activeTopic, setActiveTopic] = useState(null);
   const [activeTab, setActiveTab] = useState("content");
-  const [completedTopics, setCompletedTopics] = useState(new Set());
-  const [isDark, setIsDark] = useState(false);
+  const [completedTopics, setCompletedTopics] = useState(() => {
+    try {
+      const stored = localStorage.getItem("fa_completed_topics");
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [completedConcepts, setCompletedConcepts] = useState(() => {
+    try {
+      const stored = localStorage.getItem("fa_completed_concepts");
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      const stored = localStorage.getItem("fa_theme_dark");
+      return stored ? JSON.parse(stored) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("fa_completed_topics", JSON.stringify(Array.from(completedTopics)));
+  }, [completedTopics]);
+
+  useEffect(() => {
+    localStorage.setItem("fa_completed_concepts", JSON.stringify(Array.from(completedConcepts)));
+  }, [completedConcepts]);
+
+  useEffect(() => {
+    localStorage.setItem("fa_theme_dark", JSON.stringify(isDark));
+  }, [isDark]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [winW, setWinW] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
   const contentRef = useRef(null);
+
+  // ── Concept explanations (AI-powered) ──────────────────────────────────────
+  const [conceptCache, setConceptCache] = useState({});
+  const [expandedConcept, setExpandedConcept] = useState(null);
+  const [loadingConcept, setLoadingConcept] = useState(null);
+
+  const fetchConceptExplanation = async (topicId, topicTitle, concept) => {
+    const key = `${topicId}::${concept}`;
+    if (expandedConcept === key) { setExpandedConcept(null); return; }
+    setExpandedConcept(key);
+    if (conceptCache[key]) return;
+    if (CONCEPT_EXPLANATIONS[key]) {
+      setConceptCache(prev => ({ ...prev, [key]: CONCEPT_EXPLANATIONS[key] }));
+      return;
+    }
+    setLoadingConcept(key);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1200,
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+          messages: [{
+            role: "user",
+            content:
+              `Search the web for the best explanation of "${concept}" in the context of ${topicTitle}. ` +
+              `Prioritize authoritative sources: MDN Web Docs, official documentation (react.dev, nodejs.org, typescript.org, etc.), ` +
+              `css-tricks.com, javascript.info, web.dev, and highly upvoted Stack Overflow answers. ` +
+              `After searching, write a teaching explanation for an intermediate developer.\n\n` +
+              `Use EXACTLY this markdown format:\n\n` +
+              `**[One crisp sentence defining ${concept}]**\n\n` +
+              `### Why It Matters\n` +
+              `[2–3 sentences. Mention real companies, real libraries, or real patterns that rely on this. Be specific.]\n\n` +
+              `### How It Works\n` +
+              `[Explain the mechanism clearly, then show a practical code example — the kind of code you'd write at a real job, not a toy. ` +
+              `Use a fenced code block with the correct language tag, e.g. \`\`\`javascript or \`\`\`css.]\n\n` +
+              `### Watch Out For\n` +
+              `- [Most common mistake beginners make]\n` +
+              `- [Second pitfall]\n` +
+              `- [Third pitfall if applicable]\n\n` +
+              `Keep prose tight (~200 words of prose + code block). No preamble, no conclusion — just the four sections above.`
+          }]
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      // Extract only text blocks — skip server_tool_use / web_search_tool_result blocks
+      const text = (data.content || [])
+        .filter(b => b.type === "text")
+        .map(b => b.text)
+        .join("\n")
+        .trim() || "Could not load explanation.";
+
+      setConceptCache(prev => ({ ...prev, [key]: text }));
+    } catch (err) {
+      setConceptCache(prev => ({
+        ...prev,
+        [key]: `**Error loading explanation**\n\n${err.message || "Network error — check your connection and try again."}`
+      }));
+    } finally {
+      setLoadingConcept(null);
+    }
+  };
 
   useEffect(() => {
     const handle = () => setWinW(window.innerWidth);
@@ -1255,6 +1720,7 @@ export default function FullstackAcademy() {
     setActiveTopic(topic);
     setActiveTab("content");
     setActiveSection("topic");
+    setExpandedConcept(null);
     if (isMobile) setSidebarOpen(false);
     setTimeout(() => contentRef.current?.scrollTo(0, 0), 10);
   };
@@ -1263,6 +1729,14 @@ export default function FullstackAcademy() {
     setCompletedTopics(prev => {
       const next = new Set(prev);
       next.has(topicId) ? next.delete(topicId) : next.add(topicId);
+      return next;
+    });
+  };
+
+  const toggleConceptComplete = (conceptKey) => {
+    setCompletedConcepts(prev => {
+      const next = new Set(prev);
+      next.has(conceptKey) ? next.delete(conceptKey) : next.add(conceptKey);
       return next;
     });
   };
@@ -1691,14 +2165,158 @@ export default function FullstackAcademy() {
                   {/* Concepts tab */}
                   {activeTab === "concepts" && (
                     <div>
-                      <p style={{ fontSize: 13, color: T.mid, marginBottom: 20, lineHeight: 1.6, transition: "color 0.25s" }}>Core concepts in this topic — all covered in depth in the Content tab.</p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                        {activeTopic.concepts.map((c, i) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${T.rule}`, transition: "border-color 0.25s" }}>
-                            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: T.light, minWidth: 20, transition: "color 0.25s" }}>{String(i + 1).padStart(2, "0")}</span>
-                            <span style={{ fontSize: 13.5, color: T.ink, transition: "color 0.25s" }}>{c}</span>
+                      {/* Concepts mastery progress bar */}
+                      <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                        background: T.paper,
+                        border: `1px solid ${T.rule}`,
+                        borderRadius: 8,
+                        padding: "14px 16px",
+                        marginBottom: 20,
+                        transition: "background 0.25s, border-color 0.25s"
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>Topic Concepts Mastery</span>
                           </div>
-                        ))}
+                          <div>
+                            <span style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", fontWeight: 600, color: T.success }}>
+                              {activeTopic.concepts.filter(c => completedConcepts.has(`${activeTopic.id}::${c}`)).length}/{activeTopic.concepts.length}
+                            </span>
+                            <span style={{ fontSize: 11, color: T.light, marginLeft: 4 }}>mastered</span>
+                          </div>
+                        </div>
+                        <div style={{ height: 4, background: T.rule, borderRadius: 2, overflow: "hidden", transition: "background 0.25s" }}>
+                          <div style={{
+                            height: "100%",
+                            width: `${Math.round((activeTopic.concepts.filter(c => completedConcepts.has(`${activeTopic.id}::${c}`)).length / activeTopic.concepts.length) * 100)}%`,
+                            background: T.success,
+                            borderRadius: 2,
+                            transition: "width 0.35s ease-out"
+                          }} />
+                        </div>
+                      </div>
+
+                      <p style={{ fontSize: 13, color: T.mid, marginBottom: 20, lineHeight: 1.6, transition: "color 0.25s" }}>
+                        Click any concept to toggle its explanation. Mark off concepts as you master them.
+                      </p>
+                      
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        {activeTopic.concepts.map((c, i) => {
+                          const key = `${activeTopic.id}::${c}`;
+                          const isOpen = expandedConcept === key;
+                          const isLoading = loadingConcept === key;
+                          const explanation = conceptCache[key];
+                          const isConceptDone = completedConcepts.has(key);
+                          return (
+                            <div key={i} style={{ borderBottom: `1px solid ${T.rule}`, transition: "border-color 0.25s" }}>
+                              {/* Concept row — clickable */}
+                              <div
+                                onClick={() => fetchConceptExplanation(activeTopic.id, activeTopic.title, c)}
+                                style={{
+                                  width: "100%",
+                                  background: isOpen ? T.accentMid : isConceptDone ? T.successBg + "12" : "none",
+                                  border: "none",
+                                  padding: "11px 12px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 12,
+                                  cursor: "pointer",
+                                  fontFamily: "inherit",
+                                  borderRadius: isOpen ? "6px 6px 0 0" : isConceptDone ? "6px" : 0,
+                                  transition: "all 0.15s ease",
+                                  borderLeft: isConceptDone ? `3px solid ${T.success}` : "3px solid transparent",
+                                }}
+                                onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = isConceptDone ? T.successBg + "20" : T.paper; }}
+                                onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = isConceptDone ? T.successBg + "12" : "none"; }}
+                              >
+                                {/* Mastered checkbox */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleConceptComplete(key);
+                                  }}
+                                  title={isConceptDone ? "Mark as uncompleted" : "Mark as mastered"}
+                                  style={{
+                                    background: isConceptDone ? T.success : "none",
+                                    border: `1.5px solid ${isConceptDone ? T.success : T.rule}`,
+                                    borderRadius: "4px",
+                                    width: "17px",
+                                    height: "17px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    color: T.canvas,
+                                    padding: 0,
+                                    flexShrink: 0,
+                                    transition: "all 0.15s ease",
+                                  }}
+                                >
+                                  {isConceptDone && (
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                  )}
+                                </button>
+
+                                <span style={{
+                                  fontSize: 10.5, fontFamily: "'DM Mono', monospace",
+                                  color: isOpen ? T.accent : T.light, minWidth: 22,
+                                  transition: "color 0.15s",
+                                }}>
+                                  {String(i + 1).padStart(2, "0")}
+                                </span>
+                                <span style={{
+                                  flex: 1, fontSize: 13.5,
+                                  fontWeight: isOpen ? 500 : 400,
+                                  color: isOpen ? T.accent : isConceptDone ? T.success : T.ink,
+                                  textDecoration: isConceptDone ? "line-through" : "none",
+                                  opacity: isConceptDone ? 0.82 : 1,
+                                  transition: "all 0.15s",
+                                }}>
+                                  {c}
+                                </span>
+                                {/* Chevron / spinner */}
+                                {isLoading ? (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, animation: "spin 0.8s linear infinite" }}>
+                                    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                                    <circle cx="12" cy="12" r="9" stroke={T.accent} strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round"/>
+                                  </svg>
+                                ) : (
+                                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, color: isOpen ? T.accent : isConceptDone ? T.success : T.light, transition: "transform 0.2s, color 0.15s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                    <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+
+                              {/* Expanded explanation panel */}
+                              {isOpen && (
+                                <div style={{
+                                  background: T.paper, borderRadius: "0 0 6px 6px",
+                                  padding: isLoading ? "20px 16px" : "0 16px 20px",
+                                  borderLeft: `3px solid ${T.accent}`,
+                                  transition: "background 0.25s",
+                                }}>
+                                  {isLoading ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10, color: T.light, fontSize: 13 }}>
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }}>
+                                        <circle cx="12" cy="12" r="9" stroke={T.accent} strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round"/>
+                                      </svg>
+                                      Loading concept explanation…
+                                    </div>
+                                  ) : explanation ? (
+                                    <div style={{ paddingTop: 16 }}>
+                                      <MarkdownContent content={explanation} />
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
