@@ -238,7 +238,7 @@ Stripe, Linear, and Vercel are famous for animations that feel native. The key: 
 - Focus outline must never be removed without a visible replacement — \`outline: none\` without an alternative is an accessibility failure
 - Keyboard focus order should follow visual reading order — DOM order matters more than CSS positioning`,
 
-  "html-css::Semantic HTML5": `**Semantic HTML5 elements tell browsers and assistive technologies what role content plays, not just how it looks.**
+  "html-css::Semantic HTML5": `**Semantic HTML5 elements tell browsers and assistive technologies what role content plays, not just how it looks.**"
 
 ### Why It Matters
 Screen readers, search engines, and browser reader modes all rely on semantic structure. Google weights content in \`<article>\` and \`<main>\` higher than random \`<div>\` blocks. The React and Vue teams explicitly recommend semantic HTML as the foundation for any component.
@@ -1218,7 +1218,7 @@ A poorly configured \`tsconfig\` silently allows bugs TypeScript was designed to
 Vercel introduced the App Router in Next.js 13 and it's now the default for all new projects. Every Next.js tutorial and Vercel template now uses App Router.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 app/
 ├── layout.tsx           ← Root layout (wraps ALL pages)
 ├── page.tsx             ← Homepage: /
@@ -1670,7 +1670,7 @@ app.use((err, req, res, next) => {
 REST is the dominant API style, used by Twitter, GitHub, Stripe, and Twilio. Stripe's REST API is widely considered the gold standard. Understanding REST is assumed in every backend interview.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 GET    /api/posts              → list all posts
 POST   /api/posts              → create a post
 GET    /api/posts/42           → get post 42
@@ -1998,7 +1998,7 @@ const posts = await prisma.post.findMany({
 Facebook's social graph, Airbnb's listing/booking system, and Stripe's payment model are famous for their thoughtful data design. A bad data model causes bugs that are impossible to fix without a painful schema migration.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 -- Social platform data model
 
 Users:      id, email, name, password_hash, created_at
@@ -2827,7 +2827,7 @@ const features = {
 Every service used by millions uses load balancing — AWS ALB, Nginx, HAProxy, Cloudflare. Without a load balancer, adding more servers doesn't help. Netflix runs multiple load balancer tiers handling billions of requests per day.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 User → DNS → Load Balancer → [Server 1, Server 2, Server 3, ...]
                                      ↓
                               Shared Database
@@ -2862,7 +2862,7 @@ Layer 4 (Transport) vs Layer 7 (Application):
 Facebook serves over 1 trillion cache hits per day. The performance difference between a cached response (0.1ms) and a database query (50-200ms) is 500-2000x.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 1. CACHE-ASIDE (Lazy Loading) — most common
    Read:  Check cache → hit? Return. Miss? → DB → write cache → return
    Write: Write to DB, invalidate/update cache
@@ -2909,7 +2909,7 @@ async function getPopularPosts() {
 When a single database can no longer handle the read/write throughput or storage (typically 5-10TB), sharding is the path forward. Instagram, WhatsApp, and Slack all use database sharding.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 USER-BASED SHARDING (most common)
 - User ID % N shards determines which server stores data
 - Shard 0: users 0, 3, 6... → Server A
@@ -2944,7 +2944,7 @@ SELECT AVG(order_total) FROM orders; -- must query ALL shards
 CAP theorem comes up in every system design interview and explains why distributed databases make different trade-offs. Cassandra prioritizes AP, HBase prioritizes CP. Understanding CAP helps you choose the right database.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 CONSISTENCY (C): every read gets the most recent write or an error
 AVAILABILITY (A): every request gets a non-error response
                   (but might not have the latest data)
@@ -2981,7 +2981,7 @@ Used by: Amazon shopping cart, DNS, social media like counts
 Amazon SQS processes trillions of messages per year. Kafka powers LinkedIn's activity feed (1 trillion messages/day), Stripe's payment processing, and Uber's real-time systems.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 Producer → [Queue/Topic] → Consumer
 
 TASK QUEUE (point-to-point):
@@ -3033,7 +3033,7 @@ new Worker('emails', async (job) => {
 Netflix's Zuul, Amazon's API Gateway, and Kong are used at massive scale. Without an API gateway, every microservice must implement its own auth and rate limiting — duplicating code across dozens of services.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 Client → API Gateway → [Auth Service, User Service, Order Service, Payment Service]
 
 WHAT THE GATEWAY HANDLES:
@@ -3075,7 +3075,7 @@ const apiLimiter = rateLimit({
 Netflix decomposed their monolith into 700+ microservices and went from releasing every few weeks to multiple times per day. Amazon's migration enabled the AWS business. Uber, Airbnb, and Twitter all use microservices for scale and team independence.
 
 ### How It Works
-\`\`\`
+\`\`\`text
 MONOLITH vs MICROSERVICES:
 
 MONOLITH:            MICROSERVICES:
