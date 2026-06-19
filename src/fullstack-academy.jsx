@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import { CONCEPT_EXPLANATIONS } from "./concepts_data.js";
 
 const CURRICULUM = [
@@ -349,7 +349,7 @@ const ExpensiveComponent = React.memo(({ data }) => {
         resources: [
           { name: "TypeScript Official Handbook", url: "https://www.typescriptlang.org/docs/handbook/intro.html", type: "Docs" },
           { name: "Matt Pocock — Total TypeScript (free tutorials)", url: "https://www.totaltypescript.com/tutorials", type: "Interactive" },
-          { name: "No BS TS — Jack Herrington (YouTube)", url: "https://www.youtube.com/watch?v=LKVHFHp0rNk", type: "Video" },
+          { name: "No BS TS — Jack Herrington (YouTube Playlist)", url: "https://www.youtube.com/playlist?list=PLNqp92_EXZBJYFrpEzdO2EapvU0GOJ09n", type: "Video" },
           { name: "TypeScript Exercises", url: "https://typescript-exercises.github.io", type: "Practice" },
         ],
         concepts: ["Types vs Interfaces", "Generics", "Union & intersection types", "Type guards", "Utility types", "Declaration files", "tsconfig"],
@@ -564,7 +564,7 @@ app/
           { name: "The Odin Project — NodeJS Course", url: "https://www.theodinproject.com/paths/full-stack-javascript/courses/nodejs", type: "Course" },
           { name: "Traversy Media — Node.js Crash Course", url: "https://www.youtube.com/watch?v=fBNz5xF-Kx4", type: "Video" },
           { name: "Node.js Official Docs", url: "https://nodejs.org/en/docs", type: "Docs" },
-          { name: "Hussein Nasser — NodeJS Internals", url: "https://www.youtube.com/c/HusseinNasser-software-engineering", type: "Video" },
+          { name: "Hussein Nasser — NodeJS Internals", url: "https://www.youtube.com/@hnasr", type: "Video" },
         ],
         concepts: ["Event-driven architecture", "Streams", "Express middleware", "REST design", "JWT auth", "File system", "Environment config"],
         content: `## Node.js & Express — Deep Dive
@@ -951,8 +951,8 @@ jobs:
         project: { title: "Design Twitter/X Clone Architecture", desc: "Document a complete system design: API gateway, microservices, message queues, CDN, caching layers — present it as a tech spec companies write before building." },
         resources: [
           { name: "System Design Primer (GitHub)", url: "https://github.com/donnemartin/system-design-primer", type: "Course" },
-          { name: "ByteByteGo — System Design (YouTube)", url: "https://www.youtube.com/c/ByteByteGo", type: "Video" },
-          { name: "Exponent — System Design Interview", url: "https://www.youtube.com/c/ExponentTV", type: "Video" },
+          { name: "ByteByteGo — System Design (YouTube)", url: "https://www.youtube.com/@ByteByteGo", type: "Video" },
+          { name: "Exponent — System Design Interview", url: "https://www.youtube.com/@tryexponent", type: "Video" },
           { name: "Martin Fowler — Architecture Patterns", url: "https://martinfowler.com/architecture/", type: "Reference" },
         ],
         concepts: ["Load balancing", "Caching strategies", "Database sharding", "CAP theorem", "Message queues", "API gateways", "Microservices"],
@@ -1886,6 +1886,107 @@ function MarkdownContent({ content }) {
   );
 }
 
+// ── Quiz (auto-generated from CONCEPT_EXPLANATIONS — no new content authored) ──
+function buildQuizQuestions(topic) {
+  const items = (topic.concepts || [])
+    .map(concept => {
+      const key = `${topic.id}::${concept}`;
+      const exp = CONCEPT_EXPLANATIONS[key];
+      if (!exp) return null;
+      const m = exp.match(/^\*\*(.+?)\*\*/);
+      if (!m) return null;
+      return { concept, definition: m[1] };
+    })
+    .filter(Boolean);
+
+  if (items.length < 2) return [];
+
+  return items.map((item, idx) => {
+    const distractors = items
+      .filter((_, i) => i !== idx)
+      .map(o => o.concept)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+    const options = [...distractors, item.concept].sort(() => Math.random() - 0.5);
+    return { question: item.definition, options, answer: item.concept };
+  });
+}
+
+function TopicQuiz({ topic, T }) {
+  const questions = useMemo(() => buildQuizQuestions(topic), [topic.id]);
+  const [idx, setIdx] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [score, setScore] = useState(0);
+
+  if (questions.length === 0) {
+    return (
+      <p style={{ fontSize: 13, color: T.light, lineHeight: 1.6 }}>
+        Not enough concept explanations are filled in yet to build a quiz for this topic — open a few concepts in the Concepts tab first.
+      </p>
+    );
+  }
+
+  if (idx >= questions.length) {
+    const pct = Math.round((score / questions.length) * 100);
+    return (
+      <div style={{ textAlign: "center", padding: "32px 0" }}>
+        <div style={{ fontSize: 34, fontWeight: 600, color: T.ink, letterSpacing: "-0.02em", marginBottom: 6 }}>{score}/{questions.length}</div>
+        <div style={{ fontSize: 13, color: T.mid, marginBottom: 24 }}>
+          {pct === 100 ? "Perfect score." : pct >= 70 ? "Solid — a couple worth a second look." : "Worth re-reading the concepts before moving on."}
+        </div>
+        <button
+          onClick={() => { setIdx(0); setScore(0); setSelected(null); }}
+          style={{ padding: "9px 20px", borderRadius: 7, border: `1px solid ${T.accent}`, background: T.accentMid, color: T.accent, fontSize: 13, fontWeight: 500, fontFamily: "inherit" }}
+        >
+          Retake quiz
+        </button>
+      </div>
+    );
+  }
+
+  const q = questions[idx];
+  const handlePick = (opt) => {
+    if (selected) return;
+    setSelected(opt);
+    if (opt === q.answer) setScore(s => s + 1);
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: T.light, marginBottom: 14, fontFamily: "'DM Mono', monospace" }}>Question {idx + 1} of {questions.length}</div>
+      <div style={{ fontSize: 15.5, color: T.ink, marginBottom: 22, lineHeight: 1.6, fontWeight: 500 }}>{q.question}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {q.options.map(opt => {
+          const isCorrect = opt === q.answer;
+          const isPicked = opt === selected;
+          let bg = T.paper, border = T.rule, color = T.ink;
+          if (selected) {
+            if (isCorrect) { bg = T.successBg; border = T.success; color = T.success; }
+            else if (isPicked) { bg = "#ef444418"; border = "#ef4444"; color = "#ef4444"; }
+          }
+          return (
+            <button
+              key={opt}
+              onClick={() => handlePick(opt)}
+              style={{ textAlign: "left", padding: "12px 16px", borderRadius: 8, border: `1px solid ${border}`, background: bg, color, fontSize: 13.5, fontFamily: "inherit", cursor: selected ? "default" : "pointer", transition: "all 0.15s" }}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+      {selected && (
+        <button
+          onClick={() => { setIdx(i => i + 1); setSelected(null); }}
+          style={{ marginTop: 22, padding: "9px 18px", borderRadius: 7, border: `1px solid ${T.accent}`, background: T.accentMid, color: T.accent, fontSize: 13, fontWeight: 500, fontFamily: "inherit" }}
+        >
+          {idx + 1 === questions.length ? "See results" : "Next question →"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function FullstackAcademy() {
   const [activeSection, setActiveSection] = useState("home");
   const [activeTopic, setActiveTopic] = useState(null);
@@ -1946,6 +2047,27 @@ export default function FullstackAcademy() {
     }));
   };
 
+  // ── Notes (per-topic, persisted locally) ────────────────────────────────────
+  const [notes, setNotes] = useState(() => {
+    try {
+      const stored = localStorage.getItem("fa_notes");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("fa_notes", JSON.stringify(notes));
+  }, [notes]);
+
+  const updateNote = (topicId, text) => {
+    setNotes(prev => ({ ...prev, [topicId]: text }));
+  };
+
+  // ── Search ───────────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+
   useEffect(() => {
     const handle = () => setWinW(window.innerWidth);
     window.addEventListener("resize", handle);
@@ -1965,9 +2087,33 @@ export default function FullstackAcademy() {
     setActiveTab("content");
     setActiveSection("topic");
     setExpandedConcept(null);
+    setSearchQuery("");
     if (isMobile) setSidebarOpen(false);
     setTimeout(() => contentRef.current?.scrollTo(0, 0), 10);
   };
+
+  const openTopicAndConcept = (topic, concept) => {
+    setActiveTopic(topic);
+    setActiveTab("concepts");
+    setActiveSection("topic");
+    setSearchQuery("");
+    if (isMobile) setSidebarOpen(false);
+    setTimeout(() => contentRef.current?.scrollTo(0, 0), 10);
+    openConceptExplanation(topic.id, topic.title, concept);
+  };
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null;
+    const topicMatches = allTopics.filter(t => t.title.toLowerCase().includes(q)).slice(0, 6);
+    const conceptMatches = [];
+    allTopics.forEach(t => {
+      (t.concepts || []).forEach(c => {
+        if (c.toLowerCase().includes(q)) conceptMatches.push({ topic: t, concept: c });
+      });
+    });
+    return { topicMatches, conceptMatches: conceptMatches.slice(0, 8) };
+  }, [searchQuery, allTopics]);
 
   const toggleComplete = (topicId) => {
     setCompletedTopics(prev => {
@@ -2077,6 +2223,54 @@ export default function FullstackAcademy() {
                 <div style={{ fontSize: 10.5, color: T.light, marginTop: 4, textAlign: "right", fontFamily: "'DM Mono', monospace", transition: "color 0.25s" }}>{progress}% complete</div>
               )}
             </div>
+          </div>
+
+          {/* Search */}
+          <div style={{ padding: "12px 20px", borderBottom: `1px solid ${T.rule}`, position: "relative", transition: "border-color 0.25s" }}>
+            <div style={{ position: "relative" }}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: T.light, pointerEvents: "none" }}>
+                <circle cx="7" cy="7" r="5.2" stroke="currentColor" strokeWidth="1.4"/>
+                <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search topics & concepts"
+                style={{ width: "100%", padding: "7px 10px 7px 30px", borderRadius: 6, border: `1px solid ${T.rule}`, background: T.canvas, color: T.ink, fontSize: 12.5, fontFamily: "inherit", outline: "none", transition: "background 0.25s, border-color 0.25s, color 0.25s" }}
+              />
+            </div>
+
+            {searchResults && (searchResults.topicMatches.length > 0 || searchResults.conceptMatches.length > 0) && (
+              <div style={{ position: "absolute", left: 20, right: 20, top: "calc(100% - 1px)", background: T.paper, border: `1px solid ${T.rule}`, borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.16)", maxHeight: 360, overflowY: "auto", zIndex: 60, transition: "background 0.25s, border-color 0.25s" }}>
+                {searchResults.topicMatches.length > 0 && (
+                  <div style={{ padding: "8px 0" }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: T.light, textTransform: "uppercase", letterSpacing: "0.06em", padding: "2px 14px 6px" }}>Topics</div>
+                    {searchResults.topicMatches.map(t => (
+                      <button key={t.id} onClick={() => openTopic(t)} style={{ width: "100%", textAlign: "left", padding: "7px 14px", background: "none", border: "none", fontSize: 12.5, color: T.ink, display: "block" }}>
+                        {t.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {searchResults.conceptMatches.length > 0 && (
+                  <div style={{ padding: "8px 0", borderTop: searchResults.topicMatches.length > 0 ? `1px solid ${T.rule}` : "none" }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: T.light, textTransform: "uppercase", letterSpacing: "0.06em", padding: "2px 14px 6px" }}>Concepts</div>
+                    {searchResults.conceptMatches.map((m, i) => (
+                      <button key={i} onClick={() => openTopicAndConcept(m.topic, m.concept)} style={{ width: "100%", textAlign: "left", padding: "7px 14px", background: "none", border: "none", display: "flex", flexDirection: "column", gap: 1 }}>
+                        <span style={{ fontSize: 12.5, color: T.ink }}>{m.concept}</span>
+                        <span style={{ fontSize: 10.5, color: T.light }}>{m.topic.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {searchQuery.trim() && searchResults && searchResults.topicMatches.length === 0 && searchResults.conceptMatches.length === 0 && (
+              <div style={{ position: "absolute", left: 20, right: 20, top: "calc(100% - 1px)", background: T.paper, border: `1px solid ${T.rule}`, borderRadius: 8, padding: "12px 14px", fontSize: 12, color: T.light, zIndex: 60 }}>
+                No matches for "{searchQuery}"
+              </div>
+            )}
           </div>
 
           {/* Nav */}
@@ -2328,19 +2522,40 @@ export default function FullstackAcademy() {
 
                   {/* Tabs */}
                   <div style={{ display: "flex", borderBottom: `1px solid ${T.rule}`, marginBottom: 28, transition: "border-color 0.25s" }}>
-                    {["content", "resources", "concepts"].map(tab => (
+                    {["content", "concepts", "quiz", "notes", "resources"].map(tab => (
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        style={{ padding: "9px 18px", background: "none", border: "none", borderBottom: `2px solid ${activeTab === tab ? T.accent : "transparent"}`, color: activeTab === tab ? T.ink : T.light, fontSize: 13, fontWeight: activeTab === tab ? 500 : 400, marginBottom: -1, textTransform: "capitalize", letterSpacing: "0.01em", transition: "color 0.15s, border-color 0.15s" }}
+                        style={{ padding: "9px 18px", background: "none", border: "none", borderBottom: `2px solid ${activeTab === tab ? T.accent : "transparent"}`, color: activeTab === tab ? T.ink : T.light, fontSize: 13, fontWeight: activeTab === tab ? 500 : 400, marginBottom: -1, textTransform: "capitalize", letterSpacing: "0.01em", transition: "color 0.15s, border-color 0.15s", display: "flex", alignItems: "center", gap: 6 }}
                       >
                         {tab}
+                        {tab === "notes" && (notes[activeTopic.id] || "").trim() && (
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: T.accent, flexShrink: 0 }} />
+                        )}
                       </button>
                     ))}
                   </div>
 
                   {/* Content tab */}
                   {activeTab === "content" && <MarkdownContent content={activeTopic.content} />}
+
+                  {/* Quiz tab */}
+                  {activeTab === "quiz" && <TopicQuiz key={activeTopic.id} topic={activeTopic} T={T} />}
+
+                  {/* Notes tab */}
+                  {activeTab === "notes" && (
+                    <div>
+                      <p style={{ fontSize: 13, color: T.mid, marginBottom: 16, lineHeight: 1.6, transition: "color 0.25s" }}>
+                        Your private notes for this topic — saved automatically, stored only in this browser.
+                      </p>
+                      <textarea
+                        value={notes[activeTopic.id] || ""}
+                        onChange={(e) => updateNote(activeTopic.id, e.target.value)}
+                        placeholder="Questions, gotchas, things to revisit before the project..."
+                        style={{ width: "100%", minHeight: 280, padding: 16, borderRadius: 8, border: `1px solid ${T.rule}`, background: T.paper, color: T.ink, fontSize: 14, lineHeight: 1.65, fontFamily: "inherit", resize: "vertical", outline: "none", transition: "background 0.25s, border-color 0.25s, color 0.25s" }}
+                      />
+                    </div>
+                  )}
 
                   {/* Resources tab */}
                   {activeTab === "resources" && (
@@ -2375,6 +2590,13 @@ export default function FullstackAcademy() {
                                     style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }}
                                   />
                                 </div>
+                                <a
+                                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(r.name.replace(/\s*\(YouTube\)\s*/i, "").replace(/—/g, " "))}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  style={{ fontSize: 11, color: T.light, textDecoration: "none", display: "inline-block", marginTop: 6, transition: "color 0.25s" }}
+                                >
+                                  Video not loading? Search for it on YouTube →
+                                </a>
                               </div>
                             );
                           }
