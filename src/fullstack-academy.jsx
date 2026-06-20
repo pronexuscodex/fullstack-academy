@@ -17,7 +17,7 @@ const CURRICULUM = [
         project: { title: "Personal Portfolio Site", desc: "Build a fully responsive portfolio with dark mode, CSS Grid layouts, animations, and accessibility best practices — your first piece of public work." },
         resources: [
           { name: "The Odin Project — HTML Foundations", url: "https://www.theodinproject.com/paths/foundations/courses/foundations", type: "Course" },
-          { name: "Kevin Powell — CSS Full Course (YouTube)", url: "https://www.youtube.com/watch?v=1Rs2ND1ryYc", type: "Video" },
+          { name: "Bro Code — HTML & CSS Full Course (YouTube)", url: "https://www.youtube.com/watch?v=HGTJBPNC-Gw", type: "Video" },
           { name: "web.dev Learn CSS", url: "https://web.dev/learn/css", type: "Interactive" },
           { name: "CSS Tricks — Complete Guide to Grid", url: "https://css-tricks.com/snippets/css/complete-guide-grid/", type: "Reference" },
         ],
@@ -89,7 +89,7 @@ Write styles for mobile first, then use min-width breakpoints to scale up:
         resources: [
           { name: "javascript.info — The Modern JS Tutorial", url: "https://javascript.info", type: "Course" },
           { name: "Eloquent JavaScript (free book)", url: "https://eloquentjavascript.net", type: "Book" },
-          { name: "Fireship — JavaScript in 100 Seconds", url: "https://www.youtube.com/watch?v=DHjqpvDnNGE", type: "Video" },
+          { name: "freeCodeCamp — Learn JavaScript, Full Course (YouTube)", url: "https://www.youtube.com/watch?v=PkZNo7MFNFg", type: "Video" },
           { name: "You Don't Know JS (book series, free)", url: "https://github.com/getify/You-Dont-Know-JS", type: "Book" },
         ],
         concepts: ["ES6+", "Closures & scope", "Promises & async/await", "DOM manipulation", "Event loop", "Prototypes", "Array methods"],
@@ -223,7 +223,7 @@ const updated = { ...user, age: 29 }; // creates new object!
         resources: [
           { name: "React Official Docs (react.dev)", url: "https://react.dev/learn", type: "Docs" },
           { name: "Scrimba — Learn React for Free", url: "https://scrimba.com/learn/learnreact", type: "Interactive" },
-          { name: "Jack Herrington — React (YouTube Playlist)", url: "https://www.youtube.com/@jherr", type: "Video" },
+          { name: "freeCodeCamp — React Course, Full Course (YouTube)", url: "https://www.youtube.com/watch?v=82PXenL4MGg", type: "Video" },
           { name: "Full Stack Open (Helsinki University)", url: "https://fullstackopen.com/en/", type: "Course" },
         ],
         concepts: ["JSX", "Hooks (useState, useEffect, useContext, useReducer, useMemo)", "Component composition", "State management", "Custom hooks", "Performance optimization", "Error boundaries"],
@@ -443,7 +443,7 @@ function makeSound(animal: Cat | Dog) {
         resources: [
           { name: "Next.js Official Docs (nextjs.org/learn)", url: "https://nextjs.org/learn", type: "Course" },
           { name: "Vercel YouTube — Next.js Crash Course", url: "https://www.youtube.com/watch?v=Sklc_fQBmcs", type: "Video" },
-          { name: "Josh tried coding — Next.js 14 Full Course", url: "https://www.youtube.com/watch?v=wm5gMKuwSYk", type: "Video" },
+          { name: "Master Next.js 15 — Full Beginner's Course (YouTube)", url: "https://www.youtube.com/watch?v=3qGQ4dGA42o", type: "Video" },
           { name: "Full Stack Open — Next.js Chapter", url: "https://fullstackopen.com/en/", type: "Course" },
         ],
         concepts: ["App Router", "Server vs Client components", "Server Actions", "Data fetching strategies", "Route handlers", "Middleware", "Image & font optimization"],
@@ -785,6 +785,7 @@ async function getUserProfile(userId: string) {
           { name: "Oh My Git! — Interactive Game", url: "https://ohmygit.org", type: "Interactive" },
           { name: "GitHub Skills", url: "https://skills.github.com", type: "Course" },
           { name: "Atlassian — Git Tutorials", url: "https://www.atlassian.com/git/tutorials", type: "Docs" },
+          { name: "freeCodeCamp — Git & GitHub Crash Course [2026] (YouTube)", url: "https://www.youtube.com/watch?v=mAFoROnOfHs", type: "Video" },
         ],
         concepts: ["Branching strategy", "Rebasing", "Cherry-pick", "Stash", "Git hooks", "PR workflows", "Conventional commits"],
         content: `## Git — Deep Dive
@@ -1016,6 +1017,7 @@ Real world: partitions happen. Choose CP (banking) or AP (social media).
           { name: "Testing Library Docs", url: "https://testing-library.com/docs/", type: "Docs" },
           { name: "Playwright Docs", url: "https://playwright.dev/docs/intro", type: "Docs" },
           { name: "Kent C. Dodds — Testing JavaScript (free articles)", url: "https://kentcdodds.com/blog?q=testing", type: "Reference" },
+          { name: "Playwright Tutorial 2026 — Full Course (YouTube Playlist)", url: "https://www.youtube.com/playlist?list=PL83cimSRP5ZmwhC6u255huRwSi9tlP-nc", type: "Video" },
         ],
         concepts: ["Unit tests", "Integration tests", "E2E tests", "Mocking", "Test coverage", "TDD", "Testing React components"],
         content: `## Testing — Deep Dive
